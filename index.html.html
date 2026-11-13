@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Audit Room</title></head><body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky top bar + stage stepper, one working stage at a time, evidence locker as a side drawer.
+   Look follows the Lab 11 deck: graphite panels, pale periwinkle glass accents, tight heavy sans headings. */
+:root{
+  --bg:#dde4ec; --bg-glow:#bcd3f2; --panel:#f4f7fb; --panel-2:#e6ecf4; --line:#c2cddb;
+  --fg:#1c232c; --muted:#53606f; --accent:#2f6fc7; --accent-fg:#ffffff; --accent-soft:#cfe0f8;
+  --pass:#17724a; --pass-bg:#d3eedf; --partial:#8f5a00; --partial-bg:#f8e6c2; --fail:#b3261e; --fail-bg:#f8d9d6;
+  --term-bg:#171b20; --term-fg:#c9defc; --term-dim:#7c8a9b; --shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px -18px rgba(30,50,80,.45);
+  --f-display:'Inter Tight','Inter',system-ui,sans-serif; --f-body:'Inter',system-ui,sans-serif; --f-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#232528; --bg-glow:#2f4a73; --panel:#2d2f33; --panel-2:#383b40; --line:#484c53;
+  --fg:#eef1f5; --muted:#a5aebb; --accent:#8db9f0; --accent-fg:#0f2340; --accent-soft:#34495f;
+  --pass:#6fd69d; --pass-bg:#21402f; --partial:#f0b64f; --partial-bg:#46391b; --fail:#ff8f85; --fail-bg:#4a2523;
+  --term-bg:#14171b; --term-fg:#c9defc; --term-dim:#7c8a9b; --shadow:0 1px 0 rgba(255,255,255,.05) inset,0 10px 30px -18px rgba(0,0,0,.8);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#232528; --bg-glow:#2f4a73; --panel:#2d2f33; --panel-2:#383b40; --line:#484c53;
+  --fg:#eef1f5; --muted:#a5aebb; --accent:#8db9f0; --accent-fg:#0f2340; --accent-soft:#34495f;
+  --pass:#6fd69d; --pass-bg:#21402f; --partial:#f0b64f; --partial-bg:#46391b; --fail:#ff8f85; --fail-bg:#4a2523;
+  --term-bg:#14171b; --term-fg:#c9defc; --term-dim:#7c8a9b; --shadow:0 1px 0 rgba(255,255,255,.05) inset,0 10px 30px -18px rgba(0,0,0,.8);color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px;min-height:100%;
+  background-image:radial-gradient(900px 420px at 85% -80px,var(--bg-glow),transparent 70%)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
+.wrap{max-width:1160px;margin:0 auto}
+h1,h2,h3{font-family:var(--f-display);letter-spacing:-.02em;line-height:1.05;margin:0;text-wrap:balance}
+h2{font-size:clamp(30px,5vw,48px);font-weight:800}
+h3{font-size:20px;font-weight:700;letter-spacing:-.01em}
+p{margin:0}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mono{font-family:var(--f-mono)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px))}
+.top-in{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:-.02em}
+.brand small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted);letter-spacing:0}
+.tools{display:flex;gap:12px;align-items:center}
+.meter{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.meter .bar{width:84px;height:8px;border-radius:99px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.meter .bar i{display:block;height:100%;background:var(--pass);transition:width .4s, background .3s}
+.meter.mid .bar i{background:var(--partial)} .meter.low .bar i{background:var(--fail)}
+.meter b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2ch}
+.lockbtn{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:6px 14px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}
+.lockbtn span{background:var(--accent);color:var(--accent-fg);border-radius:99px;min-width:22px;text-align:center;font-size:12px;padding:0 6px}
+
+.steps{display:flex;gap:8px;overflow-x:auto;padding:14px 2px 6px;scrollbar-width:thin}
+.step{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:7px 14px 7px 8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.step i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:var(--panel-2);color:var(--muted);font-variant-numeric:tabular-nums}
+.step.cur{background:linear-gradient(135deg,var(--accent-soft),var(--panel));border-color:var(--accent)}
+.step.cur i{background:var(--accent);color:var(--accent-fg)}
+.step.done i{background:var(--pass-bg);color:var(--pass)}
+.step.lock{opacity:.5;cursor:not-allowed}
+
+/* shared parts */
+.stage{padding-top:22px;display:grid;gap:20px}
+.head{display:grid;gap:10px;max-width:760px}
+.head p{color:var(--muted);font-size:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.card.flat{box-shadow:none;background:var(--panel-2)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.grid2.wide{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}.grid2.wide2{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}
+@media(max-width:860px){.grid2,.grid2.wide,.grid2.wide2,.grid3,.grid4{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:861px) and (max-width:1020px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:9px 16px;font-weight:600;font-size:14px;transition:transform .1s,background .15s}
+.btn:hover{background:var(--panel-2)} .btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.08);background:var(--accent)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.danger{border-color:var(--fail);color:var(--fail)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pill{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:600;background:var(--panel-2);color:var(--muted);border:1px solid var(--line)}
+.pill.pass{background:var(--pass-bg);color:var(--pass);border-color:transparent}
+.pill.partial{background:var(--partial-bg);color:var(--partial);border-color:transparent}
+.pill.fail{background:var(--fail-bg);color:var(--fail);border-color:transparent}
+.note{font-size:13px;color:var(--muted)}
+.callout{border-radius:14px;padding:12px 14px;font-size:14px;border:1px solid var(--line);background:var(--panel-2)}
+.callout.warn{background:var(--partial-bg);color:var(--partial);border-color:transparent}
+.callout.bad{background:var(--fail-bg);color:var(--fail);border-color:transparent}
+.callout.good{background:var(--pass-bg);color:var(--pass);border-color:transparent}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:transparent;padding:7px 14px;font-size:13px;font-weight:600;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--panel-2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.seg button[aria-pressed="true"].p-pass{background:var(--pass);color:var(--panel)}
+.seg button[aria-pressed="true"].p-partial{background:var(--partial);color:var(--panel)}
+.seg button[aria-pressed="true"].p-fail{background:var(--fail);color:var(--panel)}
+.seg button[disabled]{cursor:default}
+
+/* pinnable things */
+[data-pin]{cursor:pointer;position:relative;transition:background .15s,box-shadow .15s}
+[data-pin]:hover{box-shadow:inset 0 0 0 1px var(--accent)}
+[data-pin].pinned{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.pinmark{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);opacity:0}
+[data-pin]:hover .pinmark,[data-pin]:focus-visible .pinmark{opacity:.9}
+[data-pin].pinned .pinmark{opacity:1}
+[data-pin].pinned .pinmark::after{content:"pinned"} [data-pin]:not(.pinned) .pinmark::after{content:"pin"}
+
+/* briefing */
+.hero{display:grid;grid-template-columns:1.25fr 1fr;gap:28px;align-items:end;padding:10px 0 4px}
+@media(max-width:860px){.hero{grid-template-columns:minmax(0,1fr)}}
+.hero h2{font-size:clamp(40px,7.5vw,88px);letter-spacing:-.04em;line-height:.92}
+.hero h2 em{font-style:normal;color:var(--accent)}
+.letter{font-family:var(--f-mono);font-size:13px;line-height:1.65;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:22px 24px;position:relative}
+.letter::before{content:"CONFIDENTIAL · AUDIT MANDATE";position:absolute;top:-10px;left:18px;background:var(--fg);color:var(--bg);font-size:10px;padding:2px 8px;letter-spacing:.1em;border-radius:3px}
+.letter h4{margin:10px 0 2px;font-size:13px}
+.letter ul{margin:2px 0 8px;padding-left:18px}
+.scope{display:grid;gap:8px}
+.scope-row{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;background:var(--panel)}
+.scope-row.ok{border-color:var(--pass)} .scope-row.no{border-color:var(--fail);background:var(--fail-bg)}
+.role{display:grid;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--panel)}
+.role b{font-family:var(--f-display);font-size:16px}
+.role span{font-size:13px;color:var(--muted)}
+input[type=text]{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:10px;padding:8px 12px;min-width:0}
+.badge{display:flex;gap:16px;align-items:center;border:2px dashed var(--pass);border-radius:16px;padding:14px 18px;background:var(--pass-bg);color:var(--pass)}
+.badge b{font-family:var(--f-display);font-size:20px}
+
+/* browser sim */
+.browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow)}
+.chrome{display:flex;gap:10px;align-items:center;padding:10px 12px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+.dots{display:flex;gap:5px}.dots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.urlbar{flex:1;min-width:0;display:flex;align-items:center;gap:0;background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:3px 4px 3px 12px;font-family:var(--f-mono);font-size:12.5px}
+.urlbar .pre{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.urlbar input{width:6.2ch;border:0;background:transparent;color:var(--fg);font:inherit;padding:2px 0;outline:none;font-weight:600;border-bottom:2px solid var(--accent)}
+.urlbar .go{border:0;background:var(--accent);color:var(--accent-fg);border-radius:99px;padding:3px 12px;font-size:12px;font-weight:600;margin-left:8px}
+.lock{color:var(--pass);font-size:12px;margin-right:6px;white-space:nowrap}
+.bbody{padding:18px;display:grid;gap:12px;min-height:340px}
+.sess{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.rec{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rec>div{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr);gap:10px;padding:8px 40px 8px 14px;border-bottom:1px solid var(--line);font-size:13.5px}
+.rec>div:last-child{border-bottom:0}
+.rec dt,.rec .k{color:var(--muted)} .rec .v{overflow-wrap:anywhere}
+.errpage{display:grid;place-items:center;text-align:center;gap:6px;min-height:260px;padding:20px}
+.errpage b{font-family:var(--f-display);font-size:44px;letter-spacing:-.03em}
+.pips{display:flex;gap:6px}.pips i{width:26px;height:10px;border-radius:99px;background:var(--panel-2);border:1px solid var(--line)}
+.pips i.used{background:var(--partial);border-color:transparent}.pips i.over{background:var(--fail);border-color:transparent}
+.obs{display:grid;gap:8px}
+.obs [data-pin]{border:1px solid var(--line);border-radius:12px;padding:10px 64px 10px 14px;font-size:14px;background:var(--panel)}
+
+/* data map */
+.cols{display:grid;gap:8px}
+.col{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;background:var(--panel)}
+.col.removed{opacity:.6;background:var(--panel-2)} .col.removed .cn{text-decoration:line-through}
+.col .cn{font-family:var(--f-mono);font-size:13px;font-weight:500}
+.col .cv{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.col.wrong{border-color:var(--fail);background:var(--fail-bg)}
+@media(max-width:560px){.col{grid-template-columns:minmax(0,1fr) auto}.col .cv{display:none}}
+.dash{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}
+.dash header{padding:12px 16px;background:linear-gradient(120deg,var(--accent-soft),var(--panel));font-family:var(--f-display);font-weight:700}
+.dash .tile{padding:10px 16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:13.5px}
+.dash .tile.broken{background:var(--fail-bg);color:var(--fail)}
+.hist{display:flex;align-items:flex-end;gap:3px;height:150px;padding:6px 0 0;border-bottom:1px solid var(--line)}
+.hist i{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-width:4px;transition:background .2s,opacity .2s}
+.hist i.old{background:var(--fail);opacity:.75}
+.hist-lab{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--f-mono);padding-top:4px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+/* vault */
+.vault{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:860px){.vault{grid-template-columns:minmax(0,1fr)}}
+.files{display:grid;gap:6px;align-content:start}
+.file{text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font-family:var(--f-mono);font-size:12px;display:flex;justify-content:space-between;gap:8px;min-width:0;overflow-wrap:anywhere}
+.file.cur{border-color:var(--accent);background:var(--accent-soft)} .file.seen::after{content:"read";color:var(--muted);font-family:var(--f-body);font-size:11px}
+.file.ghost{border-style:dashed;color:var(--muted);cursor:default}
+.doc{display:grid;gap:0;align-content:start}
+.doc h3{margin-bottom:12px}
+.doc .blk{padding:10px 70px 10px 14px;border-radius:10px;margin:0}
+.doc table{width:100%;border-collapse:collapse;font-size:13px}
+.doc td,.doc th{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+.doc th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.doc tr.blk td:last-child{padding-right:20px}
+.doc tr[data-pin]:hover{background:var(--panel-2);box-shadow:none}
+.doc tr[data-pin].pinned{background:var(--accent-soft);box-shadow:none}
+.tblscroll{overflow-x:auto}
+mark{background:var(--partial-bg);color:var(--partial);border-radius:3px;padding:0 2px}
+.hits{display:grid;gap:6px;margin-top:8px}
+.hit{text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font-size:13px}
+.hit small{display:block;color:var(--muted);font-family:var(--f-mono);font-size:11px}
+
+/* terminal */
+.term{background:var(--term-bg);color:var(--term-fg);border-radius:14px;padding:14px 4px;font-family:var(--f-mono);font-size:12.5px;min-height:300px;overflow-x:auto;border:1px solid var(--line)}
+.term .ln{padding:3px 70px 3px 16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.term .ln.cmd{color:#8db9f0;margin-top:8px}
+.term .ln.dim{color:var(--term-dim)}
+.term [data-pin]{border-radius:0}
+.term [data-pin]:hover{box-shadow:inset 0 0 0 1px #8db9f0}
+.term [data-pin].pinned{background:rgba(141,185,240,.18);box-shadow:inset 3px 0 0 #8db9f0}
+.term .pinmark{color:#8db9f0}
+.term .bad{color:#ff8f85}.term .okk{color:#6fd69d}
+.cmds{display:grid;gap:8px}
+.cmds button{text-align:left;font-family:var(--f-mono);font-size:12.5px;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:9px 12px}
+.cmds button:hover{background:var(--panel-2)} .cmds button.ran{border-color:var(--accent)}
+.login{display:grid;gap:8px;max-width:340px}
+.login input{width:100%;opacity:.7}
+
+/* locker */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);z-index:40;background:var(--panel);border-left:1px solid var(--line);box-shadow:-20px 0 50px -20px rgba(0,0,0,.5);transform:translateX(105%);transition:transform .25s;display:flex;flex-direction:column;padding:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) 16px}
+.drawer.open{transform:none}
+.drawer .list{overflow:auto;display:grid;gap:8px;align-content:start;margin-top:12px;flex:1}
+.pinitem{border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px;background:var(--panel-2);display:grid;gap:4px}
+.pinitem small{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.pinitem button{justify-self:start;border:0;background:transparent;color:var(--muted);font-size:12px;text-decoration:underline;padding:0}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:35;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.open{opacity:1;pointer-events:auto}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,30px);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:12px;font-size:14px;z-index:60;opacity:0;pointer-events:none;transition:all .25s;max-width:min(92vw,520px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.bad{background:var(--fail);color:var(--panel)}
+
+/* verdict */
+.vrow{display:grid;gap:10px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--panel)}
+.vtop{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.vtop b{font-size:15px}.vtop small{color:var(--muted);margin-left:8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:99px;padding:4px 12px;font-size:12.5px;max-width:100%;text-align:left}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.chip.rel{border-color:var(--pass)}.chip.noise{border-color:var(--partial)}
+.evbtn{border:0;background:transparent;color:var(--accent);font-size:13px;font-weight:600;padding:0;text-decoration:underline}
+.vrow.right{border-color:var(--pass)}.vrow.wrong{border-color:var(--fail)}
+.why{font-size:13.5px;color:var(--muted)}
+.stat{display:grid;gap:2px;padding:16px;border-radius:16px;border:1px solid var(--line);background:var(--panel)}
+.stat b{font-family:var(--f-display);font-size:38px;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.rank{font-family:var(--f-display);font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-.03em}
+
+/* fix sprint */
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+@media(max-width:1020px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.board{grid-template-columns:minmax(0,1fr)}}
+.lane{border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--panel-2);display:grid;gap:8px;align-content:start;min-height:140px}
+.lane header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lane header b{font-family:var(--f-display);font-size:16px}
+.lane header span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lane.full{border-color:var(--partial)}
+.fcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:8px;font-size:13.5px}
+.fcard .bs{display:flex;gap:4px;flex-wrap:wrap}
+.fcard .bs button{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:2px 8px;font-size:11.5px;font-weight:600}
+.fcard .bs button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.fcard.good{border-color:var(--pass)}.fcard.bad{border-color:var(--fail)}
+.fcard .fb{font-size:12.5px;color:var(--muted)}
+.backlog{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.reaudit{display:grid;gap:8px}
+.rarow{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 14px;background:var(--panel);font-size:14px}
+.rarow .arrow{color:var(--muted)}
+.big{font-family:var(--f-display);font-size:clamp(46px,8vw,92px);font-weight:800;letter-spacing:-.04em;line-height:.9;font-variant-numeric:tabular-nums}
+pre.report{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--f-mono);font-size:12.5px;line-height:1.6;background:var(--term-bg);color:var(--term-fg);border-radius:14px;padding:18px;margin:0;max-height:520px;overflow:auto;border:1px solid var(--line)}
+ol.q{margin:0;padding-left:20px;display:grid;gap:10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="top"><div class="top-in">
+    <div class="brand">The Audit Room <small>Lab 11 · Part 2 · Ethics &amp; Cultural Competency</small></div>
+    <div class="tools">
+      <div class="meter" id="meter" title="Conduct drops when you act outside your written authorisation"><span>Conduct</span><div class="bar"><i id="meterBar" style="width:100%"></i></div><b id="meterNum">100</b></div>
+      <button class="lockbtn" id="lockBtn" type="button">Evidence locker <span id="pinCount">0</span></button>
+    </div>
+  </div></div>
+<div class="wrap">
+  <nav class="steps" id="steps" aria-label="Lab stages"></nav>
+  <main class="stage" id="stage"></main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Evidence locker">
+  <div class="row" style="justify-content:space-between"><h3>Evidence locker</h3><button class="btn" id="closeLock" type="button">Close</button></div>
+  <p class="note" style="margin-top:6px">Everything you pin lives here. Quality matters more than quantity: on the Verdict stage you attach evidence to each check, and irrelevant evidence counts as noise.</p>
+  <div class="list" id="lockList"></div>
+</aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- data ---------------- */
+const CHECKS=[
+ {id:'c1',name:'Lawful basis documented',art:'Art. 6',key:'pass',where:'Policy Vault',why:'Every purpose in the lawful basis register names a basis: public task, contract or consent.'},
+ {id:'c2',name:'Data minimisation',art:'Art. 5(1)(c)',key:'fail',where:'Data Map and the portal record view',why:'Five of the twelve columns (next-of-kin home address, passport number, religion, social handle, parental income) are not needed to run the portal. The register even says no special-category data is processed, yet religion is stored.'},
+ {id:'c3',name:'Privacy notice (purpose)',art:'Art. 13',key:'pass',where:'Policy Vault',why:'The notice says why data is used, who receives it, what rights students have and who the DPO is.'},
+ {id:'c4',name:'Data accuracy',art:'Art. 5(1)(d)',key:'pass',where:'Policy Vault',why:'Students can correct their own details and must confirm them every September.'},
+ {id:'c5',name:'Retention schedule',art:'Art. 5(1)(e)',key:'fail',where:'Policy Vault and Data Map time machine',why:'The schedule is still a draft, the register shows retention as TBC everywhere and alumni records back to 1998 are never deleted.'},
+ {id:'c6',name:'Encryption in transit / at rest',art:'Art. 32',key:'partial',where:'Config Lab',why:'TLS 1.3 and an encrypted primary database are good, but nightly backups are stored unencrypted, which the university’s own policy forbids.'},
+ {id:'c7',name:'Access control and MFA',art:'Art. 32',key:'fail',where:'Portal Probe and Config Lab',why:'Any logged-in student can read another student’s record by changing a sequential ID, and none of the 14 admin accounts use MFA (the policy only says it “should”).'},
+ {id:'c8',name:'Breach procedure (72 h)',art:'Art. 33',key:'pass',where:'Policy Vault',why:'A written procedure sets the 72-hour ICO clock, names the DPO and was tested in May 2026.'},
+ {id:'c9',name:'Data subject rights (SAR)',art:'Art. 15',key:'pass',where:'Policy Vault',why:'A SAR form exists, identity is checked and the one-month deadline is documented.'},
+ {id:'c10',name:'Records of processing',art:'Art. 30',key:'partial',where:'Policy Vault',why:'The register covers 5 of the 8 systems in the IT inventory. HR, the Alumni CRM and the Research store are missing.'}
+];
+const CK=Object.fromEntries(CHECKS.map(c=>[c.id,c]));
+
+const DOCS=[
+ {id:'d1',file:'01_Lawful_Basis_Register.docx',title:'Lawful Basis Register',blocks:[
+  ['b1','Owner: Data Protection Office · last reviewed 12 March 2026',[]],
+  ['b2','Admissions and enrolment — lawful basis: public task (Art. 6(1)(e)). Special-category data: none processed.',['c1','c2']],
+  ['b3','Grades and assessment — lawful basis: public task (Art. 6(1)(e)).',['c1']],
+  ['b4','Student portal accounts — lawful basis: contract (Art. 6(1)(b)).',['c1']],
+  ['b5','Alumni newsletters — lawful basis: consent (Art. 6(1)(a)), withdrawable at any time.',['c1']],
+  ['b6','Next review due: March 2027.',[]]]},
+ {id:'d2',file:'02_Student_Privacy_Notice.pdf',title:'Student Privacy Notice (v4.2)',blocks:[
+  ['b1','Plain-English summary for new students.',[]],
+  ['b2','Why we use your data: to deliver your course, assess your work and support your wellbeing.',['c3']],
+  ['b3','Who we share it with: examiners, funding bodies and the Students’ Union, where necessary.',['c3']],
+  ['b4','Your rights: to see, correct, erase or restrict your data, and to complain to the ICO.',['c3']],
+  ['b5','Questions? Contact the Data Protection Officer: dpo@northbridge.example',['c3']],
+  ['b6','This notice is available in six languages.',[]]]},
+ {id:'d3',file:'03_Data_Quality_Procedure.docx',title:'Data Quality Procedure',blocks:[
+  ['b1','Students can view and correct their contact details in the portal at any time.',['c4']],
+  ['b2','Each September students must confirm their details before enrolment completes.',['c4']],
+  ['b3','Corrections reach downstream systems within 5 working days.',['c4']],
+  ['b4','Paper forms are shredded after scanning.',[]]]},
+ {id:'d4',file:'04_Breach_Response.docx',title:'Personal Data Breach Response',blocks:[
+  ['b1','Anyone who suspects a personal data breach must tell the DPO immediately.',['c8']],
+  ['b2','Unless the breach is unlikely to result in a risk to people, the DPO notifies the ICO within 72 hours of becoming aware.',['c8']],
+  ['b3','If the risk to students is high, they are told directly and without undue delay.',['c8']],
+  ['b4','Last tested: tabletop exercise, May 2026.',['c8']]]},
+ {id:'d5',file:'05_Subject_Access_Requests.docx',title:'Subject Access Request Procedure',blocks:[
+  ['b1','Requests may be made verbally or in writing, including through the online SAR form.',['c9']],
+  ['b2','Identity is verified before any data is released.',['c9']],
+  ['b3','We reply within one month of receipt (extendable by two further months for complex requests).',['c9']],
+  ['b4','No fee is charged for a first request.',['c9']]]},
+ {id:'d6',file:'06_Records_of_Processing.xlsx',title:'Records of Processing Activities',table:true,blocks:[
+  ['b1','Register covers 5 of the 8 systems listed in the IT asset inventory.',['c10']],
+  ['r1',['Student Portal','Teaching and records','identity, contact, grades','TBC'],['c5']],
+  ['r2',['Admissions','Applications and offers','identity, qualifications','TBC'],['c5']],
+  ['r3',['Finance and bursaries','Fees and funding','identity, bank, income','TBC'],['c5']],
+  ['r4',['Learning platform','Course delivery','identity, submissions','TBC'],['c5']],
+  ['r5',['Library system','Lending','identity, loans','TBC'],['c5']],
+  ['r6',['HR system','— not recorded —','—','—'],['c10']],
+  ['r7',['Alumni CRM','— not recorded —','—','—'],['c10']],
+  ['r8',['Research data store','— not recorded —','—','—'],['c10']]]},
+ {id:'d7',file:'07_Information_Security_Policy.docx',title:'Information Security Policy (v2.1)',blocks:[
+  ['b1','All university systems must encrypt data in transit (TLS 1.2 or later).',['c6']],
+  ['b2','Primary data stores and backups must be encrypted at rest.',['c6']],
+  ['b3','Admin access to systems holding personal data should use multi-factor authentication.',['c7']],
+  ['b4','Personal data must be kept in line with the Retention Schedule (Appendix C — draft, not yet published).',['c5']],
+  ['b5','Access to personal data is limited to people who need it for their role.',['c7']],
+  ['b6','Staff must lock their screens when away from their desks.',[]]]},
+ {id:'d8',file:'Archive/Alumni_CRM_notes.txt',title:'Alumni CRM notes',blocks:[
+  ['b1','The Alumni CRM holds full student records for every graduate since 1998 (41,200 records).',['c5']],
+  ['b2','No deletion or anonymisation jobs are configured. Records are kept “in case they are needed”.',['c5']],
+  ['b3','Next-of-kin home addresses collected at enrolment are retained with each record.',['c2','c5']],
+  ['b4','The Alumni Office is based in the Old Library, room 2.14.',[]]]}
+];
+const EV={}; // registry of evidence
+DOCS.forEach(d=>d.blocks.forEach(([bid,content,checks])=>{
+  const text=Array.isArray(content)?(d.title+': '+content[0]+' — '+content.slice(1).join(' · ')):content;
+  EV[d.id+bid]={id:d.id+bid,src:'Policy Vault — '+d.title,text,checks};
+}));
+
+const TERM=[
+ {cmd:'scan tls --target portal.northbridge.example',lines:[
+   ['target: portal.northbridge.example','dim',[]],
+   ['TLS 1.3 · certificate valid · HSTS enabled','okk',['c6']],
+   ['result: encryption in transit OK','',[]]]},
+ {cmd:'scan volume --name students-db-prod',lines:[
+   ['volume: students-db-prod (primary)','dim',[]],
+   ['disk encryption: AES-256 at rest','okk',['c6']],
+   ['result: encryption at rest OK','',[]]]},
+ {cmd:'scan bucket --name nightly-backups-prod',lines:[
+   ['bucket: nightly-backups-prod · 90 nightly copies of the students database','dim',[]],
+   ['encryption at rest: NOT ENABLED','bad',['c6']],
+   ['result: FAIL — copies of student data stored in clear text','bad',[]]]},
+ {cmd:'scan auth --role admin',lines:[
+   ['accounts with admin role: 14','dim',[]],
+   ['MFA enforced: 0 of 14','bad',['c7']],
+   ['lockout after 10 failed attempts · session timeout 8 h','dim',[]]]},
+ {cmd:'scan ids --app student-portal',lines:[
+   ['record identifier pattern: sequential integer, step 1','bad',['c7']],
+   ['ownership check on GET /student/record: none detected','bad',['c7']],
+   ['result: any authenticated user can enumerate records','bad',[]]]}
+];
+TERM.forEach((t,ti)=>t.lines.forEach((l,li)=>{EV['t'+ti+'_'+li]={id:'t'+ti+'_'+li,src:'Config Lab — '+t.cmd.split(' ').slice(0,2).join(' '),text:l[0],checks:l[2]};}));
+
+const FIELDS=[['name','Full name',[]],['email','University email',[]],['addr','Home address',[]],['course','Course',[]],['grades','Grades',[]],['ec','Emergency contact',[]],
+ ['nokAddr','Next-of-kin home address',['c2']],['passport','Passport number',['c2']],['religion','Religion',['c2']],['social','Social media handle',['c2']],['income','Parental income',['c2']]];
+FIELDS.forEach(f=>{EV['rf_'+f[0]]={id:'rf_'+f[0],src:'Portal Probe — record view',text:'The portal record view displays “'+f[1]+'” for each student.',checks:f[2]};});
+const NAMES={20481:'Audit Test Account A',20482:'Amira Hassan',20483:'Tom Whitlock',20484:'Priya Nair',20485:'Jamal Okafor'};
+function rec(id){const n=id-20480;const nm=NAMES[id];return{name:nm+' (synthetic)',email:nm.toLowerCase().replace(/ /g,'.')+'@students.northbridge.example',addr:n+' Example Road, Testville TV'+n+' 1AA',course:'BSc Cyber Security, Year '+(1+n%3),grades:'Average '+(58+n*3)+'%',ec:'Test Contact · 07000 00000'+n,nokAddr:n+' Sample Lane, Testville',passport:'TEST-0048'+n,religion:'Test value',social:'@test_'+n,income:'£'+(20+n*4)+',000 (test)'};}
+
+const COLS=[
+ ['student_id','20481',1,'Nobody could log in or be matched to a record.'],
+ ['full_name','Amira Hassan',1,'Records could not be tied to a person.'],
+ ['uni_email','a.hassan@students…',1,'No login name and no way to contact students.'],
+ ['date_of_birth','2005-03-14',1,'Identity checks (password resets, SAR requests) would fail.'],
+ ['home_address','12 Example Road…',1,'Certificates and letters could not be posted.'],
+ ['course_grades','Average 64%',1,'The grades page would show nothing.'],
+ ['emergency_contact','Test Contact · 0700…',1,'Staff could not reach anyone in an emergency.'],
+ ['nok_home_address','2 Sample Lane…',0,''],
+ ['passport_number','TEST-00482',0,''],
+ ['religion','Test value',0,''],
+ ['social_media_handle','@test_2',0,''],
+ ['parental_income','£28,000 (test)',0,'']
+];
+const TILE={student_id:'Sign-in',full_name:'Welcome banner',uni_email:'Contact details',date_of_birth:'Identity check',home_address:'Postal address',course_grades:'My grades',emergency_contact:'Emergency contact'};
+
+const FIX=[
+ {id:'f1',t:'Add a server-side ownership check to every record request, then patch and re-test.',ok:[0],fixes:'c7',why:'Closes the hole students are exposed to right now.'},
+ {id:'f2',t:'Enforce MFA on all 14 admin accounts.',ok:[0],fixes:'c7',why:'Admin accounts reach everything. Cheap to switch on and high impact.'},
+ {id:'f3',t:'Replace sequential IDs with random identifiers (defence in depth).',ok:[1,2],fixes:'',why:'Helps, but only after the ownership check. Hiding the door is not locking it.'},
+ {id:'f4',t:'Securely delete next-of-kin addresses, passport numbers, religion, social handles and parental income from the portal database.',ok:[1],fixes:'c2',why:'Needs a data owner sign-off and a safe deletion, so plan it within 30 days.'},
+ {id:'f5',t:'Publish a retention schedule and purge alumni records that are past it.',ok:[1],fixes:'c5',why:'A decision plus a deletion job. Neither belongs in the first 48 hours.'},
+ {id:'f6',t:'Turn on encryption at rest for the nightly backups.',ok:[1],fixes:'c6',why:'Policy already requires it, so schedule it within 30 days.'},
+ {id:'f7',t:'Add the HR system, Alumni CRM and Research store to the Art. 30 record of processing.',ok:[2,1],fixes:'c10',why:'Paperwork that keeps the register current. It is an ongoing duty.'},
+ {id:'f8',t:'Train staff on data protection and schedule regular audits.',ok:[2],fixes:'',why:'This is a habit, not a one-off fix.'},
+ {id:'f9',t:'Publish a vulnerability disclosure policy and security contact, so finders know where to report.',ok:[2,1],fixes:'',why:'Part 1 in one line: the student needed somewhere to report to.'},
+ {id:'f10',t:'Email students asking them not to change the number in the web address.',ok:[3],fixes:'',why:'Asking people not to exploit a flaw does not remove the flaw.'},
+ {id:'f11',t:'Hide the ID by encoding it in Base64.',ok:[3],fixes:'',why:'Encoding is not access control. Anyone can decode it.'}
+];
+const BUCKETS=[{n:'Fix now',s:'next 48 hours',cap:3},{n:'Next 30 days',s:'planned',cap:4},{n:'Ongoing',s:'routine',cap:3},{n:'Reject',s:'does not help',cap:99}];
+const EXPOSE=['about 2 days','about 30 days','90+ days','indefinitely'];
+const SYSTEMS=[
+ ['Student Portal test environment, accounts 20481–20485',1],
+ ['Structure of the students database (no live rows)',1],
+ ['Documents in the Policy Vault',1],
+ ['Read-only configuration scans',1],
+ ['The live Library lending system',0],
+ ['Staff mailboxes',0],
+ ['Guessing or resetting admin passwords',0],
+ ['Exporting records “to keep as proof”',0]
+];
+
+/* ---------------- state ---------------- */
+const fresh=()=>({v:1,stage:0,name:'',signed:false,scope:{},conduct:100,log:[],probeIds:[],crossCount:0,patched:false,exported:false,guessed:false,
+  map:{},mapChecks:0,mapShown:false,ret:28,pins:{},docs:{},term:[],verdict:{},attach:{},submitted:false,fix:{},reaudited:false});
+let S=(function(){try{const v=JSON.parse(localStorage.getItem('lab11p2'));return v&&v.v===1?v:fresh();}catch(e){return fresh();}})();
+const save=()=>{try{localStorage.setItem('lab11p2',JSON.stringify(S));}catch(e){}};
+
+/* ---------------- helpers ---------------- */
+let tt;function toast(m,bad){const t=$('#toast');t.textContent=m;t.className='toast show'+(bad?' bad':'');clearTimeout(tt);tt=setTimeout(()=>t.className='toast',bad?4200:2200);}
+function conduct(d,why){S.conduct=Math.max(0,Math.min(100,S.conduct+d));S.log.push(why+' ('+d+')');save();meter();toast(why+' Conduct '+d+'.',true);}
+function meter(){const m=$('#meter');m.className='meter'+(S.conduct<40?' low':S.conduct<70?' mid':'');$('#meterBar').style.width=S.conduct+'%';$('#meterNum').textContent=S.conduct;}
+function pinCount(){const n=Object.keys(S.pins).length;$('#pinCount').textContent=n;}
+function togglePin(id){
+  if(S.pins[id]){delete S.pins[id];Object.keys(S.attach).forEach(k=>S.attach[k]=S.attach[k].filter(x=>x!==id));}
+  else if(EV[id]){const e=EV[id];S.pins[id]={id:e.id,src:e.src,text:e.text,checks:e.checks};toast('Pinned to your evidence locker.');}
+  save();refreshPins();
+}
+function refreshPins(){pinCount();$$('[data-pin]').forEach(el=>{const on=!!S.pins[el.dataset.pin];el.classList.toggle('pinned',on);el.setAttribute('aria-pressed',on);});renderLocker();}
+function renderLocker(){
+  const ids=Object.keys(S.pins);
+  $('#lockList').innerHTML=ids.length?ids.map(id=>{const p=S.pins[id];return `<div class="pinitem"><small>${esc(p.src)}</small><div>${esc(p.text)}</div><button type="button" data-unpin="${id}">Remove</button></div>`;}).join(''):'<p class="note">Nothing pinned yet. In any station, click a line of evidence to pin it.</p>';
+}
+const locked=i=>(i>=1&&i<=5&&!S.signed)||(i===6&&!S.submitted)||(i===7&&!S.reaudited);
+function steps(){
+  const T=['Briefing','Portal Probe','Data Map','Policy Vault','Config Lab','Verdict','Fix Sprint','Report'];
+  const done=[S.signed,S.probeIds.length>0,S.mapChecks>0,Object.keys(S.docs).length>0,S.term.length>0,S.submitted,S.reaudited,false];
+  $('#steps').innerHTML=T.map((t,i)=>`<button type="button" class="step${S.stage===i?' cur':''}${done[i]?' done':''}${locked(i)?' lock':''}" data-go="${i}" ${S.stage===i?'aria-current="step"':''}><i>${done[i]&&S.stage!==i?'✓':i+1}</i>${t}</button>`).join('');
+}
+function go(i){
+  if(locked(i)){toast(i===6?'Submit your verdict first.':i===7?'Run the re-audit first.':'Sign the authorisation letter first.',true);return;}
+  S.stage=i;save();steps();const st=$('#stage');st.innerHTML='';MOUNT[i](st);refreshPins();window.scrollTo({top:0});
+}
+const head=(eb,h,p)=>`<div class="head"><div class="eyebrow">${eb}</div><h2>${h}</h2><p>${p}</p></div>`;
+const nextBtn=(i,label)=>`<div class="row"><button class="btn primary" type="button" data-go="${i}">${label}</button></div>`;
+const pinEl=(id,inner,tag='div',cls='')=>`<${tag} class="${cls}" data-pin="${id}" tabindex="0" role="button" aria-pressed="false">${inner}<span class="pinmark"></span></${tag}>`;
+
+/* ---------------- stage 0 : briefing ---------------- */
+function mountBrief(st){
+  const allSet=SYSTEMS.every((s,i)=>S.scope[i]!==undefined);
+  st.innerHTML=`
+  <section class="hero"><div class="head"><div class="eyebrow">Part 2 · hands-on</div>
+    <h2>Now <em>you</em> run the audit.</h2>
+    <p>In Part 1 a student stumbled on a flaw and had to choose. This time the university has asked you, in writing, to check how it stores student data against UK GDPR. You get 10 checks, four evidence stations and one rule: stay inside your authorisation. Three tempting shortcuts are hidden along the way.</p></div>
+    <div class="card flat"><div class="eyebrow">Suggested pace for a 55-minute lab</div><div class="row" style="margin-top:8px;gap:6px">
+      <span class="pill">Briefing 5</span><span class="pill">Stations 25</span><span class="pill">Verdict 8</span><span class="pill">Fix sprint 10</span><span class="pill">Debrief 7</span></div>
+      <p class="note" style="margin-top:10px">Keep the Part 1 slides on GDPR principles and the Computer Misuse Act open beside you.</p></div>
+  </section>
+  <section><h3 style="margin-bottom:10px">Work in teams of four</h3><div class="grid4">
+    <div class="role"><b>Lead Auditor</b><span>Drives the stations and makes the final call on each rating.</span></div>
+    <div class="role"><b>Evidence Clerk</b><span>Owns the locker. Pins only what proves something.</span></div>
+    <div class="role"><b>Ethics Watch</b><span>Stops the team before it steps outside the letter. Watches the Conduct meter.</span></div>
+    <div class="role"><b>DPO’s Advocate</b><span>Challenges every rating: “What is your evidence?”</span></div></div>
+    <p class="note" style="margin-top:8px">Rotate roles at each station.</p></section>
+  <section class="grid2">
+    <div class="letter"><div><b>From:</b> Data Protection Office, Northbridge University (fictional)<br><b>Ref:</b> DPO/AUD/2026-11</div>
+      <h4>YOU ARE AUTHORISED TO</h4><ul><li>Use the Student Portal <u>test environment</u> with test accounts 20481–20485. Your login is 20481.</li><li>View the <u>structure</u> of the students database. No live rows.</li><li>Read documents in the Policy Vault.</li><li>Run read-only configuration scans.</li></ul>
+      <h4>YOU ARE NOT AUTHORISED TO</h4><ul><li>Touch the live Library system, staff mailboxes or any real student’s account.</li><li>Guess or reset passwords.</li><li>Copy, export or keep any personal data.</li></ul>
+      <h4>IF YOU FIND SOMETHING SERIOUS</h4><p>Stop. Tell the DPO the same day, in writing.</p></div>
+    <div class="card" style="display:grid;gap:12px;align-content:start"><h3>Read the letter, then mark each action</h3>
+      <p class="note">Computer Misuse Act s.1 asks one question: did you have permission for <em>that</em> access? Mark what the letter covers.</p>
+      <div class="scope" id="scope">${SYSTEMS.map((s,i)=>scopeRow(s,i)).join('')}</div>
+      <div id="scopeMsg"></div>
+      <div class="row"><label for="aname" class="note">Auditor name</label><input type="text" id="aname" placeholder="Your name" value="${esc(S.name)}" maxlength="40" autocomplete="off"></div>
+      <div class="row"><button class="btn primary" type="button" id="sign" ${allSet?'':'disabled'}>${S.signed?'Letter signed':'Sign the letter'}</button></div>
+    </div>
+  </section>
+  ${S.signed?`<div class="badge"><b>Authorisation badge issued</b><span>${esc(S.name||'Trainee Auditor')} · scope: portal test accounts, schema, policy vault, read-only scans</span></div>${nextBtn(1,'Start at the Portal Probe')}`:''}`;
+}
+function scopeRow(s,i){const v=S.scope[i];return `<div class="scope-row" data-row="${i}"><span>${esc(s[0])}</span><span class="seg"><button type="button" data-scope="${i}:1" aria-pressed="${v===1}">In scope</button><button type="button" data-scope="${i}:0" aria-pressed="${v===0}">Out</button></span></div>`;}
+
+/* ---------------- stage 1 : portal probe ---------------- */
+function recordHTML(id){
+  const r=rec(id),own=id===20481;
+  return `<div class="sess"><span>Signed in as <b>20481</b> (Audit Test Account A)</span><span class="pill">Synthetic test data</span></div>
+  ${own?'':'<div class="callout bad"><b>This is not your account.</b> The portal has just shown you someone else’s record.</div>'}
+  <dl class="rec" style="margin:0">${FIELDS.map(f=>`<div data-pin="rf_${f[0]}" tabindex="0" role="button" aria-pressed="false" style="position:relative"><span class="k">${f[1]}</span><span class="v">${esc(r[f[0]])}</span><span class="pinmark"></span></div>`).join('')}</dl>
+  <div class="row"><button class="btn" type="button" id="exportBtn">Export all records (CSV)</button></div>`;
+}
+function errHTML(code,title,msg){return `<div class="errpage"><b>${code}</b><div><b style="font-size:20px;font-family:var(--f-body)">${title}</b></div><p class="note" style="max-width:420px">${msg}</p></div>`;}
+function mountProbe(st){
+  const used=S.crossCount;
+  st.innerHTML=head('Station 1 · Portal Probe','Change one number. See what changes.','You are signed in as test account 20481. Edit the ID in the address bar and press Go. The letter lets you use accounts 20481–20485, and a good auditor stops at proof.')+
+  `<div class="grid2 wide">
+    <div class="browser"><div class="chrome"><div class="dots"><i></i><i></i><i></i></div>
+      <div class="urlbar"><span class="lock">● https</span><span class="pre">portal.northbridge.example/student/record?id=</span><input id="pid" value="20481" inputmode="numeric" maxlength="6" aria-label="Record ID"><button class="go" id="pgo" type="button">Go</button></div></div>
+      <div class="bbody" id="pbody">${recordHTML(20481)}</div></div>
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="card"><div class="eyebrow">Test budget</div><div class="pips" id="pips" style="margin:8px 0">${[0,1,2].map(i=>`<i class="${i<used?(used>3?'over':'used'):''}"></i>`).join('')}</div>
+        <p class="note">Requests for other accounts. Three is plenty to prove a point. More is unnecessary access.</p>
+        ${S.patched?'<div class="callout good" style="margin-top:10px"><b>Re-test mode.</b> Your ownership-check fix is live. Try account 20482 again.</div>':''}</div>
+      <div class="card"><div class="eyebrow">Auditor’s notebook</div><div class="obs" id="obs" style="margin-top:8px"></div>
+        <p class="note" id="obsHint">Observations appear here as you test. Click a line of the record, or an observation, to pin it as evidence.</p></div>
+    </div></div>
+  ${nextBtn(2,'On to the Data Map')}`;
+  renderObs();
+}
+function renderObs(){
+  const o=[];
+  if(S.probeIds.some(i=>i!==20481))o.push(['obs_own','Logged in as 20481, requested another account: a full record came back. There is no ownership check.',['c7']]);
+  const cross=S.probeIds.filter(i=>i!==20481);if(new Set(cross).size>=2)o.push(['obs_seq','Neighbouring numbers all work, so identifiers are sequential and trivially guessable.',['c7']]);
+  o.forEach(([id,t,c])=>{EV[id]={id,src:'Portal Probe — observation',text:t,checks:c};});
+  const el=$('#obs');if(!el)return;el.innerHTML=o.map(([id,t])=>pinEl(id,esc(t))).join('');
+  $('#obsHint').hidden=o.length>0;refreshPins();
+}
+function probe(raw){
+  const body=$('#pbody');raw=String(raw).trim();
+  if(!/^\d{4,6}$/.test(raw)){body.innerHTML=errHTML('400','Bad request','The record ID must be a number.');return;}
+  const id=+raw;
+  if(id===20481){body.innerHTML=recordHTML(id);refreshPins();return;}
+  if(id<20482||id>20485){body.innerHTML=errHTML('Lab stop','Outside your authorisation','Your letter covers accounts 20481–20485 only. On a real system this request would be unauthorised access under s.1 of the Computer Misuse Act.');conduct(-30,'You requested an ID outside the test range.');return;}
+  if(S.patched){body.innerHTML=errHTML('403','Forbidden','You can only view your own record. The ownership check is working.');return;}
+  S.crossCount++;if(!S.probeIds.includes(id))S.probeIds.push(id);save();
+  body.innerHTML=recordHTML(id);
+  if(S.crossCount>3)conduct(-10,'Unnecessary access: you had already proved the flaw.');
+  const pips=$('#pips');if(pips)pips.innerHTML=[0,1,2].map(i=>`<i class="${i<S.crossCount?(S.crossCount>3?'over':'used'):''}"></i>`).join('');
+  if(S.crossCount>3&&pips)pips.innerHTML=[0,1,2].map(()=>'<i class="over"></i>').join('');
+  renderObs();steps();
+}
+
+/* ---------------- stage 2 : data map ---------------- */
+function mountMap(st){
+  st.innerHTML=head('Station 2 · Data Map','What does the portal really need?','Purpose of the Student Portal: show students their timetable, grades and contact details, and let staff reach them. For each column in the <span class="mono">students</span> table, decide Keep or Remove, and watch the portal preview react.')+
+  `<div class="grid2 wide">
+    <div class="card" style="display:grid;gap:10px"><div class="cols" id="cols"></div>
+      <div class="row"><button class="btn primary" type="button" id="mapCheck">Check my map</button><button class="btn" type="button" id="mapShow" hidden>Show me the answer</button></div>
+      <div id="mapMsg"></div></div>
+    <div style="display:grid;gap:16px;align-content:start"><div class="dash" id="dash"></div>
+      <div class="note">Removing a column the portal needs breaks a tile. Keeping one it does not need breaks nothing, which is exactly why over-collection goes unnoticed.</div></div></div>
+  <div class="card" style="display:grid;gap:12px"><div><div class="eyebrow">Alumni archive time machine</div><h3 style="margin-top:4px">How long should graduate records live?</h3></div>
+    <p class="note">Today every graduate since 1998 is kept in full, forever. Drag to choose how many years after graduation full records are kept. Red records would be purged or reduced to a minimal transcript record.</p>
+    <div class="hist" id="hist"></div><div class="hist-lab"><span>class of 1998</span><span>class of 2024</span></div>
+    <div class="row" style="justify-content:space-between"><label for="ret" class="note"><b id="retLabel"></b></label><span class="pill" id="retOut"></span></div>
+    <input type="range" id="ret" min="1" max="28" value="${S.ret}">
+    <p class="note">The real number comes from your DPO, sector guidance and legal advice. What the audit looks for is a documented decision with a reason, and today there is none.</p>
+    ${pinEl('ret_old','<span>Pin: the oldest alumni records (class of 1998) are still held in full with no purge job.</span>','div','callout')}
+  </div>${nextBtn(3,'On to the Policy Vault')}`;
+  EV.ret_old={id:'ret_old',src:'Data Map — time machine',text:'Alumni archive: full records retained for graduates back to 1998 with no deletion job.',checks:['c5']};
+  drawCols();drawHist();
+}
+function drawCols(){
+  const wrongSet=S._wrong||{};
+  $('#cols').innerHTML=COLS.map(([n,v,need],i)=>{const rm=S.map[n]==='remove';
+    return `<div class="col${rm?' removed':''}${wrongSet[n]?' wrong':''}"><span class="cn">${n}</span><span class="cv">${esc(v)}</span><span class="seg"><button type="button" data-col="${n}:keep" aria-pressed="${!rm}">Keep</button><button type="button" data-col="${n}:remove" aria-pressed="${rm}">Remove</button></span></div>`;}).join('');
+  const tiles=COLS.filter(c=>c[2]).map(c=>{const broken=S.map[c[0]]==='remove';return `<div class="tile${broken?' broken':''}"><span>${TILE[c[0]]}</span><span>${broken?'Broken: '+esc(c[3]):'Working'}</span></div>`;}).join('');
+  $('#dash').innerHTML=`<header>Student portal preview</header>${tiles}`;
+}
+function drawHist(){
+  const counts=[];for(let i=0;i<27;i++)counts.push(1000+40*i);counts[26]+=160;
+  const max=Math.max(...counts);let purge=0;
+  const cut=S.ret>=28?99:S.ret;
+  $('#hist').innerHTML=counts.map((c,i)=>{const yrs=2026-(1998+i);const old=yrs>cut;if(old)purge+=c;return `<i class="${old?'old':''}" style="height:${Math.round(c/max*100)}%" title="Class of ${1998+i}: ${c.toLocaleString()} records"></i>`;}).join('');
+  $('#retLabel').textContent=S.ret>=28?'Keep forever (today’s behaviour)':'Keep full records for '+S.ret+' year'+(S.ret>1?'s':'')+' after graduation';
+  $('#retOut').textContent=purge.toLocaleString()+' of 41,200 records past the limit';
+}
+function mapCheck(){
+  const wrong={},over=[],kept=[],good=[];
+  COLS.forEach(([n,v,need,why])=>{const rm=S.map[n]==='remove';if(need&&rm){over.push([n,why]);wrong[n]=1;}if(!need&&!rm){kept.push(n);wrong[n]=0;}if(!need&&rm)good.push(n);});
+  S._wrong=Object.fromEntries(Object.keys(wrong).filter(k=>COLS.find(c=>c[0]===k)[2]).map(k=>[k,1]));
+  S.mapChecks++;save();drawCols();
+  const msg=$('#mapMsg');let h='';
+  if(!over.length&&!kept.length){h=`<div class="callout good"><b>Spot on.</b> Five columns are not needed for the portal’s purpose. That is a data minimisation finding (Art. 5(1)(c)). Note the register also says no special-category data is processed, yet <span class="mono">religion</span> is stored.</div>`;}
+  else{h=`<div class="callout warn"><b>${good.length} of 5 excess columns removed.</b> ${kept.length?kept.length+' more still hold data the portal does not need. For each remaining column ask: would anything on the preview break without it? ':''}${over.length?'You removed '+over.length+' column'+(over.length>1?'s':'')+' the portal needs (highlighted).':''}</div>`;}
+  if(good.length){EV.map_find={id:'map_find',src:'Data Map — column review',text:'Columns stored but not needed for the portal’s purpose: '+good.join(', ')+'.',checks:['c2']};h+=pinEl('map_find','Pin your finding: '+esc(EV.map_find.text),'div','callout');}
+  msg.innerHTML=h;if(S.mapChecks>=2)$('#mapShow').hidden=false;refreshPins();steps();
+}
+
+/* ---------------- stage 3 : vault ---------------- */
+function mountVault(st){
+  st.innerHTML=head('Station 3 · Policy Vault','Read the paperwork. Pin only what proves something.','Open the documents. Every line can be pinned, but not every line is evidence. Use search to hunt for what you suspect is missing.')+
+  `<div class="vault"><div style="display:grid;gap:10px;align-content:start">
+    <input type="text" id="q" placeholder="Search the vault, e.g. retention" aria-label="Search the vault" autocomplete="off">
+    <div class="files" id="files"></div><div class="hits" id="hits"></div></div>
+    <div class="card doc" id="doc"></div></div>${nextBtn(4,'On to the Config Lab')}`;
+  drawFiles(S._cur||'d1');openDoc(S._cur||'d1');
+}
+function drawFiles(cur){
+  $('#files').innerHTML=DOCS.map(d=>`<button type="button" class="file${d.id===cur?' cur':''}${S.docs[d.id]?' seen':''}" data-doc="${d.id}"><span>${esc(d.file)}</span></button>`).join('')+
+   `<div class="file ghost"><span>Retention_Schedule.docx</span><span style="font-family:var(--f-body);font-size:11px">not found</span></div>`;
+}
+function openDoc(id,hl){
+  const d=DOCS.find(x=>x.id===id);S._cur=id;S.docs[id]=1;save();drawFiles(id);steps();
+  const hi=t=>{t=esc(t);if(!hl)return t;const re=new RegExp('('+hl.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');return t.replace(re,'<mark>$1</mark>');};
+  let h=`<h3>${esc(d.title)}</h3>`;
+  if(d.table){
+    const intro=d.blocks[0];h+=pinEl(d.id+intro[0],hi(intro[1]),'p','blk');
+    h+=`<div class="tblscroll"><table><thead><tr><th>System</th><th>Purpose</th><th>Data</th><th>Retention</th></tr></thead><tbody>`+d.blocks.slice(1).map(b=>`<tr class="blk" data-pin="${d.id+b[0]}" tabindex="0" role="button" aria-pressed="false" style="position:relative">${b[1].map(c=>`<td>${hi(c)}</td>`).join('')}</tr>`).join('')+`</tbody></table></div><p class="note" style="margin-top:10px">Click a row to pin it.</p>`;
+  }else h+=d.blocks.map(b=>pinEl(d.id+b[0],hi(b[1]),'p','blk')).join('');
+  $('#doc').innerHTML=h;refreshPins();
+}
+function search(q){
+  const hits=$('#hits');q=q.trim().toLowerCase();if(q.length<3){hits.innerHTML='';return;}
+  const out=[];DOCS.forEach(d=>d.blocks.forEach(b=>{const t=Array.isArray(b[1])?b[1].join(' '):b[1];if(t.toLowerCase().includes(q))out.push([d,t]);}));
+  hits.innerHTML=out.length?out.map(([d,t])=>`<button type="button" class="hit" data-doc="${d.id}" data-hl="${esc(q)}"><small>${esc(d.file)}</small>${esc(t.length>90?t.slice(0,90)+'…':t)}</button>`).join(''):'<p class="note">No results. An empty search is evidence too, so think about what a missing document means.</p>';
+}
+
+/* ---------------- stage 4 : config lab ---------------- */
+function mountConfig(st){
+  st.innerHTML=head('Station 4 · Config Lab','Ask the systems, not the paperwork.','Run the read-only scans. Policy says what should happen. Scans show what does. Click any output line to pin it.')+
+  `<div class="grid2 wide2">
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="card"><div class="eyebrow">Read-only scans</div><div class="cmds" id="cmds" style="margin-top:10px">${TERM.map((t,i)=>`<button type="button" data-scan="${i}" class="${S.term.includes(i)?'ran':''}">$ ${esc(t.cmd)}</button>`).join('')}</div></div>
+      <div class="card"><div class="eyebrow">Admin login page (inspect only)</div>
+        <div class="login" style="margin:10px 0"><input type="text" value="admin" disabled aria-label="Username"><input type="text" value="••••••••" disabled aria-label="Password"><span class="note">Factors requested: password</span>
+        <button class="btn danger" type="button" id="guess">Try common passwords</button></div></div></div>
+    <div class="term" id="term" aria-live="polite"></div></div>${nextBtn(5,'Ready to give my verdict')}`;
+  const t=$('#term');t.innerHTML='<div class="ln dim">Select a scan on the left. Output appears here.</div>';
+  if(S.term.length){t.innerHTML='';S.term.forEach(i=>termWrite(i,true));}
+  refreshPins();
+}
+function termWrite(i,instant){
+  const t=$('#term'),c=TERM[i];
+  const add=(cls,txt,pin)=>{const d=document.createElement('div');d.className='ln '+cls;d.textContent=txt;if(pin){d.dataset.pin=pin;d.tabIndex=0;d.setAttribute('role','button');const m=document.createElement('span');m.className='pinmark';d.appendChild(m);}t.appendChild(d);return d;};
+  add('cmd','$ '+c.cmd);
+  const lines=c.lines;let k=0;
+  const step=()=>{if(k>=lines.length){refreshPins();return;}const l=lines[k];add(l[1],l[0],'t'+i+'_'+k);k++;if(instant)step();else setTimeout(step,260);};
+  step();
+}
+
+/* ---------------- stage 5 : verdict ---------------- */
+function mountVerdict(st){
+  const n=Object.keys(S.pins).length;
+  st.innerHTML=head('Verdict','Rate each check, then back it with evidence.','Choose Pass, Partial or Fail for each check, and attach the pinned evidence that supports it. Attach only what is relevant, because noise counts against you.')+
+  (!S.submitted&&n<4?`<div class="callout warn">You have only ${n} pinned item${n===1?'':'s'}. An auditor cannot sign off a rating without evidence. Visit the stations first, or continue if you are sure.</div>`:'')+
+  `<div style="display:grid;gap:10px" id="vrows">${CHECKS.map(vrow).join('')}</div>
+   <div class="row"><button class="btn primary" type="button" id="submitV" ${S.submitted?'disabled':''}>${S.submitted?'Verdict submitted':'Submit audit'}</button><span class="note" id="vmsg"></span></div>
+   <div id="vscore"></div>`;
+  if(S.submitted)vscore();
+}
+function vrow(c){
+  const v=S.verdict[c.id],att=S.attach[c.id]||[],sub=S.submitted;
+  let cls='vrow';if(sub)cls+=v===c.key?' right':' wrong';
+  const pins=Object.values(S.pins);
+  const open=S._open===c.id||sub;
+  const shown=sub?att.map(id=>S.pins[id]).filter(Boolean):pins;
+  const chips=shown.length?shown.map(p=>{const on=att.includes(p.id);let k='';if(sub&&on)k=p.checks.includes(c.id)?' rel':' noise';return `<button type="button" class="chip${k}" data-att="${c.id}:${p.id}" aria-pressed="${on}" ${sub?'disabled':''} title="${esc(p.src+': '+p.text)}"><b>${esc(p.src.split(' — ')[1]||p.src)}</b> · ${esc(p.text.length>64?p.text.slice(0,64)+'…':p.text)}</button>`;}).join(''):(sub?'<span class="note">No evidence attached.</span>':'<span class="note">Nothing in your locker yet.</span>');
+  const attShown=sub?att.map(id=>S.pins[id]).filter(Boolean):[];
+  let fb='';
+  if(sub){const rel=att.filter(id=>S.pins[id]&&S.pins[id].checks.includes(c.id)).length,noise=att.length-rel;
+    fb=`<div class="why"><b>${v===c.key?'Correct':'Not quite'}.</b> Answer: <span class="pill ${c.key}">${c.key}</span> ${esc(c.why)}<br><b>Evidence:</b> ${rel} relevant${noise?', '+noise+' noise':''}${rel?'':'. Look in '+esc(c.where)+' next time'}.</div>`;}
+  return `<div class="${cls}" data-v="${c.id}"><div class="vtop"><div><b>${c.name}</b><small>${c.art}</small></div>
+    <div class="seg">${['pass','partial','fail'].map(r=>`<button type="button" class="p-${r}" data-rate="${c.id}:${r}" aria-pressed="${v===r}" ${sub?'disabled':''}>${r[0].toUpperCase()+r.slice(1)}</button>`).join('')}</div></div>
+    <div><button class="evbtn" type="button" data-open="${c.id}">${open?'Hide':'Attach'} evidence (${att.length})</button></div>
+    ${open?`<div class="chips">${chips}</div>`:''}${fb}</div>`;
+}
+function scoreAll(){
+  let ok=0,sup=0,rel=0,att=0;
+  CHECKS.forEach(c=>{if(S.verdict[c.id]===c.key)ok++;const a=S.attach[c.id]||[];const r=a.filter(id=>S.pins[id]&&S.pins[id].checks.includes(c.id));if(r.length)sup++;rel+=r.length;att+=a.length;});
+  const fx=FIX.filter(f=>S.fix[f.id]!==undefined&&f.ok.includes(S.fix[f.id])).length;
+  return{acc:ok*10,ev:sup*10,qual:att?Math.round(rel/att*100):0,cond:S.conduct,tri:Math.round(fx/FIX.length*100),ok,sup};
+}
+function rankOf(sc){const a=(sc.acc+sc.ev+sc.cond+(S.reaudited?sc.tri:sc.acc))/4;return a>=90?'Lead Auditor':a>=75?'Senior Auditor':a>=55?'Auditor':'Trainee. Re-read the evidence';}
+function vscore(){
+  const sc=scoreAll();const el=$('#vscore');if(!el)return;
+  const overallMine=Object.values(S.verdict).includes('fail')?'Not compliant: remediation required before sign-off':Object.values(S.verdict).includes('partial')?'Partially compliant':'Compliant';
+  el.innerHTML=`<div class="grid4"><div class="stat"><b>${sc.ok}/10</b><span>Ratings correct</span></div><div class="stat"><b>${sc.sup}/10</b><span>Checks with solid evidence</span></div><div class="stat"><b>${sc.qual}%</b><span>Evidence signal vs noise</span></div><div class="stat"><b>${sc.cond}</b><span>Conduct</span></div></div>
+  <div class="card" style="margin-top:14px;display:grid;gap:8px"><div class="eyebrow">Your overall rating</div><div class="rank" style="font-size:24px">${overallMine}</div>
+  <p class="note">The lab’s reference result is 5 pass, 2 partial, 3 fail: remediation required before sign-off. Check any row you rated differently.</p></div>
+  <div class="row" style="margin-top:14px"><button class="btn primary" type="button" data-go="6">Now fix it: Fix Sprint</button></div>`;
+}
+
+/* ---------------- stage 6 : fix sprint ---------------- */
+function mountFix(st){
+  st.innerHTML=head('Fix Sprint','You cannot fix everything at once.','Your team has capacity for 3 urgent fixes, 4 planned ones and 3 ongoing habits. Triage the backlog, reject anything that does not really help, then run the re-audit.')+
+  `<div class="board" id="board"></div><div><div class="eyebrow" style="margin-bottom:8px">Backlog</div><div class="backlog" id="backlog"></div></div>
+  <div class="row"><button class="btn primary" type="button" id="reaudit">Run the re-audit</button><span class="note" id="fmsg"></span></div><div id="rres"></div>`;
+  drawBoard();if(S.reaudited)reaudit(true);
+}
+function fcard(f){
+  const b=S.fix[f.id];
+  const bs=BUCKETS.map((x,i)=>`<button type="button" data-fx="${f.id}:${i}" aria-pressed="${b===i}">${i===0?'Now':i===1?'30 days':i===2?'Ongoing':'Reject'}</button>`).join('')+(b!==undefined?`<button type="button" data-fx="${f.id}:-1">Back</button>`:'');
+  const done=S.reaudited&&b!==undefined;let cls='fcard',fb='';
+  if(done){const good=f.ok.includes(b);cls+=good?' good':' bad';fb=`<div class="fb"><b>${good?'Good call.':'Rethink.'}</b> ${esc(f.why)}</div>`;}
+  return `<div class="${cls}"><div>${esc(f.t)}</div><div class="bs">${bs}</div>${fb}</div>`;
+}
+function drawBoard(){
+  const lanes=BUCKETS.map((b,i)=>{const items=FIX.filter(f=>S.fix[f.id]===i);const full=b.cap<99&&items.length>=b.cap;
+    return `<div class="lane${full?' full':''}"><header><b>${b.n}</b><span>${b.s}${b.cap<99?' · '+items.length+'/'+b.cap:''}</span></header>${items.map(fcard).join('')||'<span class="note">Empty</span>'}</div>`;}).join('');
+  $('#board').innerHTML=lanes;
+  const bl=FIX.filter(f=>S.fix[f.id]===undefined);$('#backlog').innerHTML=bl.map(fcard).join('')||'<p class="note">Backlog cleared.</p>';
+  $('#reaudit').disabled=bl.length>0;$('#fmsg').textContent=bl.length?bl.length+' card'+(bl.length>1?'s':'')+' left to triage.':'';
+}
+function exposure(){const b=Math.max(S.fix.f1===undefined?3:S.fix.f1,S.fix.f2===undefined?3:S.fix.f2);return EXPOSE[b];}
+function reaudit(quiet){
+  S.reaudited=true;S.patched=S.fix.f1!==undefined&&S.fix.f1!==3;save();steps();drawBoard();
+  const needs={c2:['f4'],c5:['f5'],c6:['f6'],c7:['f1','f2'],c10:['f7']};
+  const after={};let pass=0;
+  CHECKS.forEach(c=>{let r=c.key;if(r!=='pass'){const ok=needs[c.id].every(f=>S.fix[f]!==undefined&&S.fix[f]!==3);if(ok)r='pass';}after[c.id]=r;if(r==='pass')pass++;});
+  const sc=scoreAll();
+  $('#rres').innerHTML=`<div class="card" style="display:grid;gap:16px;margin-top:6px"><div class="eyebrow">Re-audit result</div>
+   <div class="row" style="gap:24px;align-items:flex-end"><div class="big" id="bigN">${quiet?pass:5}</div><div><div class="rank" style="font-size:26px">of 10 checks compliant</div><p class="note">Up from 5. Triage score ${sc.tri}%.</p></div></div>
+   <div class="callout ${S.fix.f1===0?'good':S.fix.f1===1?'warn':'bad'}"><b>Exposure clock:</b> with your plan, any logged-in student could read other students’ records for ${exposure()}. ${S.fix.f1===0?'You closed it first.':'Every day the ownership check waits is another day of possible breach under UK GDPR, and a 72-hour ICO clock if it is exploited.'}</div>
+   <div class="reaudit">${CHECKS.map(c=>`<div class="rarow"><span>${c.name}</span><span class="pill ${c.key}">${c.key}</span><span class="arrow">→</span><span class="pill ${after[c.id]}">${after[c.id]}</span></div>`).join('')}</div>
+   ${S.patched?'<p class="note">The ownership check is live in the Portal Probe. Go back and re-test account 20482 to see it return 403.</p>':'<div class="callout bad">Your plan did not include an ownership check, so the portal is still open. Go back to the Portal Probe and you will see it.</div>'}
+   <div class="row"><button class="btn primary" type="button" data-go="7">Build my audit report</button></div></div>`;
+  if(!quiet){const big=$('#bigN');let n=5;const iv=setInterval(()=>{n++;if(n>pass){clearInterval(iv);return;}big.textContent=n;},220);}
+  $('#reaudit').disabled=true;
+}
+
+/* ---------------- stage 7 : report ---------------- */
+function reportText(){
+  const sc=scoreAll(),d=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const L=[];
+  L.push('GDPR AUDIT REPORT — Northbridge University (simulated)');
+  L.push('Auditor: '+(S.name||'Trainee Auditor')+'   Date: '+d);
+  L.push('Scope: Student Portal test environment (accounts 20481-20485), students database structure, Policy Vault, read-only configuration scans.');
+  L.push('');L.push('FINDINGS');
+  CHECKS.forEach((c,i)=>{const v=(S.verdict[c.id]||'not rated').toUpperCase();const ev=(S.attach[c.id]||[]).map(id=>S.pins[id]).filter(Boolean);
+    L.push((i+1)+'. '+c.name+' ('+c.art+'): '+v);ev.forEach(e=>L.push('   - '+e.text+' ['+e.src+']'));});
+  L.push('');
+  const f=Object.values(S.verdict);
+  L.push('OVERALL: '+(f.includes('fail')?'Not compliant. Remediation required before sign-off.':f.includes('partial')?'Partially compliant.':'Compliant.'));
+  L.push('');L.push('ACTION PLAN');
+  BUCKETS.slice(0,3).forEach((b,i)=>{L.push(b.n.toUpperCase()+' ('+b.s+')');const it=FIX.filter(x=>S.fix[x.id]===i);if(!it.length)L.push('   (none)');it.forEach(x=>L.push('   - '+x.t));});
+  L.push('');L.push('Exposure with this plan: records readable by any logged-in student for '+exposure()+'.');
+  L.push('Conduct during the audit: '+S.conduct+'/100'+(S.log.length?' ('+S.log.join('; ')+')':' (no breaches of scope)')+'.');
+  L.push('Evidence discipline: '+sc.qual+'% of attached evidence was relevant.');
+  return L.join('\n');
+}
+function mountReport(st){
+  const sc=scoreAll();
+  st.innerHTML=head('Report and debrief','Your audit, on one page.','Copy this into your lab write-up. Then use the debrief questions to link what you did back to Part 1.')+
+  `<div class="grid4"><div class="stat"><b>${sc.acc}%</b><span>Accuracy</span></div><div class="stat"><b>${sc.ev}%</b><span>Evidence</span></div><div class="stat"><b>${sc.cond}%</b><span>Conduct</span></div><div class="stat"><b>${sc.tri}%</b><span>Triage</span></div></div>
+   <div class="card" style="display:grid;gap:6px"><div class="eyebrow">Your rank</div><div class="rank">${rankOf(sc)}</div></div>
+   <div class="row"><button class="btn primary" type="button" id="copyR">Copy report</button><span class="note" id="cmsg"></span></div>
+   <pre class="report" id="rep" tabindex="0">${esc(reportText())}</pre>
+   <div class="grid2"><div class="card"><h3 style="margin-bottom:10px">Debrief questions</h3><ol class="q">
+     <li>You read another student’s record in one request. What made that lawful for you and unlawful for the student in Part 1?</li>
+     <li>Which of the three traps tempted your team most, and what would it have cost the university on a real system?</li>
+     <li>A board will fund only one thing this quarter. Which fix do you defend, and what does waiting cost on each of the others?</li>
+     <li>Pick the check you were least sure of. What extra evidence would change your mind?</li></ol></div>
+    <div class="card"><h3 style="margin-bottom:10px">60-second DPO briefing</h3><p class="note" style="margin-bottom:10px">Pairs: one is the auditor, one is the DPO. Deliver in this order, then swap.</p><ol class="q">
+     <li><b>What we found.</b> One sentence, plain English.</li><li><b>Who could be harmed.</b> How many people and what data.</li><li><b>What we need approved.</b> Your Fix Now list.</li><li><b>By when.</b> And what happens if it slips.</li></ol></div></div>
+   <div class="row"><button class="btn danger" type="button" id="restart">Restart the lab</button></div>`;
+}
+
+/* ---------------- events ---------------- */
+const MOUNT=[mountBrief,mountProbe,mountMap,mountVault,mountConfig,mountVerdict,mountFix,mountReport];
+document.addEventListener('click',e=>{
+  const t=e.target;let b;
+  if((b=t.closest('[data-go]'))){go(+b.dataset.go);return;}
+  if((b=t.closest('[data-pin]'))){togglePin(b.dataset.pin);return;}
+  if((b=t.closest('[data-unpin]'))){togglePin(b.dataset.unpin);return;}
+  if((b=t.closest('[data-scope]'))){if(S.signed)return;const[i,v]=b.dataset.scope.split(':').map(Number);S.scope[i]=v;save();const row=$('[data-row="'+i+'"]');row.className='scope-row';$$('button',row).forEach(x=>x.setAttribute('aria-pressed',x.dataset.scope===b.dataset.scope));$('#scopeMsg').innerHTML='';$('#sign').disabled=!SYSTEMS.every((q,k)=>S.scope[k]!==undefined);return;}
+  if(t.closest('#sign')){
+    S.name=($('#aname').value||'').trim();const bad=SYSTEMS.map((s,i)=>S.scope[i]!==s[1]?i:-1).filter(i=>i>=0);
+    if(bad.length){$$('.scope-row').forEach((r,i)=>r.className='scope-row '+(bad.includes(i)?'no':'ok'));$('#scopeMsg').innerHTML=`<div class="callout bad"><b>${bad.length} mismatch${bad.length>1?'es':''}.</b> Re-read the letter. Only what is written in it is covered, and a good reason never widens it. On a real engagement, getting this wrong is where an audit becomes an offence.</div>`;return;}
+    S.signed=true;save();steps();mountBrief($('#stage'));toast('Letter signed. Stations unlocked.');return;}
+  if(t.closest('#pgo')){probe($('#pid').value);return;}
+  if(t.closest('#exportBtn')){if(!S.exported){S.exported=true;conduct(-40,'You tried to export personal data.');}else toast('Blocked again. Auditors describe exposure, they never keep the data.',true);$('#pbody').insertAdjacentHTML('afterbegin','<div class="callout bad"><b>Blocked by lab rules.</b> Your letter forbids copying or exporting personal data. Describe what was exposed, never the data itself.</div>');return;}
+  if((b=t.closest('[data-col]'))){const[n,a]=b.dataset.col.split(':');S.map[n]=a;S._wrong=null;save();drawCols();return;}
+  if(t.closest('#mapCheck')){mapCheck();return;}
+  if(t.closest('#mapShow')){COLS.forEach(c=>S.map[c[0]]=c[2]?'keep':'remove');S._wrong=null;save();drawCols();mapCheck();return;}
+  if((b=t.closest('[data-doc]'))){openDoc(b.dataset.doc,b.dataset.hl);return;}
+  if((b=t.closest('[data-scan]'))){const i=+b.dataset.scan;if(S.term.includes(i)){toast('You already ran that scan.');return;}if(!S.term.length)$('#term').innerHTML='';S.term.push(i);save();b.classList.add('ran');termWrite(i,false);steps();return;}
+  if(t.closest('#guess')){if(!S.guessed){S.guessed=true;conduct(-30,'You tried to guess admin passwords.');}else toast('Out of scope. Guessing passwords is never part of an audit letter like this.',true);return;}
+  if((b=t.closest('[data-rate]'))){const[c,r]=b.dataset.rate.split(':');S.verdict[c]=r;save();$('[data-v="'+c+'"]').outerHTML=vrow(CK[c]);return;}
+  if((b=t.closest('[data-open]'))){const c=b.dataset.open;S._open=S._open===c?null:c;CHECKS.forEach(k=>{const el=$('[data-v="'+k.id+'"]');if(el)el.outerHTML=vrow(k);});return;}
+  if((b=t.closest('[data-att]'))){const[c,p]=b.dataset.att.split(':');const a=S.attach[c]||(S.attach[c]=[]);const i=a.indexOf(p);if(i>=0)a.splice(i,1);else a.push(p);save();$('[data-v="'+c+'"]').outerHTML=vrow(CK[c]);return;}
+  if(t.closest('#submitV')){const miss=CHECKS.filter(c=>!S.verdict[c.id]);if(miss.length){$('#vmsg').textContent='Rate all 10 checks first ('+miss.length+' left).';return;}S.submitted=true;save();steps();mountVerdict($('#stage'));vscore();return;}
+  if((b=t.closest('[data-fx]'))){const[id,v]=b.dataset.fx.split(':');const n=+v;if(S.reaudited){toast('The plan is locked after the re-audit.');return;}
+    if(n<0)delete S.fix[id];else{const cap=BUCKETS[n].cap;const cnt=FIX.filter(f=>S.fix[f.id]===n&&f.id!==id).length;if(cnt>=cap){toast(BUCKETS[n].n+' is full ('+cap+' max). What can wait?',true);return;}S.fix[id]=n;}
+    save();drawBoard();return;}
+  if(t.closest('#reaudit')){reaudit(false);return;}
+  if(t.closest('#copyR')){const txt=reportText(),m=$('#cmsg');const fb=()=>{const r=document.createRange();r.selectNodeContents($('#rep'));const s=getSelection();s.removeAllRanges();s.addRange(r);m.textContent='Report selected. Press Ctrl/Cmd+C to copy.';};
+    try{navigator.clipboard.writeText(txt).then(()=>m.textContent='Copied.',fb);}catch(x){fb();}return;}
+  if(t.closest('#restart')){S=fresh();save();meter();pinCount();go(0);return;}
+  if(t.closest('#lockBtn')){$('#drawer').classList.add('open');$('#scrim').classList.add('open');renderLocker();return;}
+  if(t.closest('#closeLock')||t===$('#scrim')){$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');}
+});
+document.addEventListener('keydown',e=>{
+  if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[data-pin]')){e.preventDefault();togglePin(e.target.dataset.pin);}
+  if(e.key==='Enter'&&e.target.id==='pid'){probe(e.target.value);}
+  if(e.key==='Escape'){$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');}
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='ret'){S.ret=+e.target.value;save();drawHist();}
+  if(e.target.id==='q')search(e.target.value);
+  if(e.target.id==='aname')S.name=e.target.value;
+});
+
+meter();pinCount();go(locked(S.stage)?0:S.stage);
+})();
+</script>
+
+</body></html>
